@@ -207,12 +207,8 @@ Int64 FileStream::getPosition()
     fpos_t pos;
     fgetpos(m_handle, &pos);
     return pos;
-#elif defined(__APPLE__) || SLANG_BSD
-    return ftello(m_handle);
 #else
-    fpos64_t pos;
-    fgetpos64(m_handle, &pos);
-    return *(Int64*)(&pos);
+    return ftello(m_handle);
 #endif
 }
 

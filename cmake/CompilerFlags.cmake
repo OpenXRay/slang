@@ -259,13 +259,19 @@ function(set_default_compile_options target)
         )
     endif()
 
-    if(NOT WIN32)
+    if(NOT WIN32 AND NOT CMAKE_SYSTEM_NAME MATCHES "BSD|DragonFly")
         # these options are for ELF specific and not for Windows
         add_supported_cxx_linker_flags(
             ${target}
             PRIVATE
             # Don't assume that symbols will be resolved at runtime
             "-Wl,--no-undefined"
+        )
+    endif()
+    if(NOT WIN32)
+        add_supported_cxx_linker_flags(
+            ${target}
+            PRIVATE
             # No reason not to do this? Useful when using split debug info
             "-Wl,--build-id"
         )
