@@ -144,6 +144,8 @@ Operating system defines, see http://sourceforge.net/p/predef/wiki/OperatingSyst
 #define SLANG_ANDROID 1
 #elif defined(__linux__) || defined(__CYGWIN__) /* note: __ANDROID__ implies __linux__ */
 #define SLANG_LINUX 1
+#elif defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__DragonFly__)
+#define SLANG_BSD 1
 #elif defined(__APPLE__) && !defined(SLANG_LLVM)
 #include "TargetConditionals.h"
 #if TARGET_OS_MAC
@@ -192,6 +194,9 @@ Any platforms not detected by the above logic are now now explicitly zeroed out.
 #ifndef SLANG_LINUX
 #define SLANG_LINUX 0
 #endif
+#ifndef SLANG_BSD
+#define SLANG_BSD 0
+#endif
 #ifndef SLANG_IOS
 #define SLANG_IOS 0
 #endif
@@ -219,7 +224,7 @@ Any platforms not detected by the above logic are now now explicitly zeroed out.
 #define SLANG_LINUX_FAMILY (SLANG_LINUX || SLANG_ANDROID)
 #define SLANG_APPLE_FAMILY (SLANG_IOS || SLANG_OSX) /* equivalent to #if __APPLE__ */
 #define SLANG_UNIX_FAMILY \
-    (SLANG_LINUX_FAMILY || SLANG_APPLE_FAMILY) /* shortcut for unix/posix platforms */
+    (SLANG_LINUX_FAMILY || SLANG_APPLE_FAMILY || SLANG_BSD) /* shortcut for unix/posix platforms */
 
 // GCC Specific
 #if SLANG_GCC_FAMILY

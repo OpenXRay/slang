@@ -19,7 +19,7 @@
 #include <execinfo.h>
 #endif
 
-#if SLANG_LINUX_FAMILY
+#if SLANG_LINUX_FAMILY || SLANG_BSD
 #include <limits.h>
 #include <unistd.h>
 #endif
@@ -359,7 +359,7 @@ SLANG_COMPILE_TIME_ASSERT(E_OUTOFMEMORY == SLANG_E_OUT_OF_MEMORY);
     dst.append("lib");
     dst.append(name);
     dst.append(".dylib");
-#elif SLANG_LINUX_FAMILY
+#elif SLANG_LINUX_FAMILY || SLANG_BSD
     if (!name.startsWith("lib"))
         dst.append("lib");
     dst.append(name);

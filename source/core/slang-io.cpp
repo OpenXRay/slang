@@ -22,7 +22,7 @@
 // clang-format on
 #endif
 
-#if defined(__linux__) || defined(__CYGWIN__) || SLANG_APPLE_FAMILY || SLANG_WASM
+#if defined(__linux__) || defined(__CYGWIN__) || SLANG_APPLE_FAMILY || SLANG_BSD || SLANG_WASM
 #include <fcntl.h>
 #include <unistd.h>
 // For Path::find
@@ -35,6 +35,12 @@
 
 #if SLANG_APPLE_FAMILY
 #include <mach-o/dyld.h>
+#endif
+
+#if SLANG_BSD
+#include <errno.h>
+#include <sys/sysctl.h>
+#include <sys/types.h>
 #endif
 
 #include <filesystem>
@@ -1047,6 +1053,24 @@ static SlangResult _calcExectuablePath(char* outPath, size_t* ioSize)
 
     *ioSize = path.getLength() + 1;
     return SLANG_E_BUFFER_TOO_SMALL;
+#endif
+
+#elif SLANG_BSD
+#if defined(__FreeBSD__) || defined(__DragonFly__)
+    int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_PATHNAME, -1};
+#elif defined(__NetBSD__)
+    int mib[4] = {CTL_KERN, KERN_PROC_ARGS, -1, KERN_PROC_PATHNAME};
+#endif
+#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__NetBSD__)
+    size_t size = bufferSize;
+    if (::sysctl(mib, 4, outPath, &size, nullptr, 0) != 0)
+    {
+        return errno == ENOMEM ? SLANG_E_BUFFER_TOO_SMALL : SLANG_FAIL;
+    }
+    return SLANG_OK;
+#else
+    SLANG_UNUSED(outPath);
+    return SLANG_E_NOT_IMPLEMENTED;
 #endif
 
 #elif SLANG_APPLE_FAMILY

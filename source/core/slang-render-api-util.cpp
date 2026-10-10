@@ -293,7 +293,7 @@ static bool _canLoadSharedLibrary(const char* libName)
 #if SLANG_WINDOWS_FAMILY
         return (_canLoadSharedLibrary("dawn") || _canLoadSharedLibrary("webgpu_dawn")) &&
                _canLoadSharedLibrary("dxcompiler") && _canLoadSharedLibrary("dxil");
-#elif SLANG_LINUX_FAMILY || SLANG_APPLE_FAMILY
+#elif SLANG_UNIX_FAMILY
         return _canLoadSharedLibrary("dawn");
 #else
         return false;

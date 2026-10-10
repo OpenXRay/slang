@@ -908,7 +908,7 @@ SlangResult ArtifactDescUtil::appendDefaultExtension(const ArtifactDesc& desc, S
 {
     String name(inName);
 
-    const bool isSharedLibraryPrefixPlatform = SLANG_LINUX_FAMILY || SLANG_APPLE_FAMILY;
+    const bool isSharedLibraryPrefixPlatform = SLANG_UNIX_FAMILY;
     if (isSharedLibraryPrefixPlatform)
     {
         // Strip lib prefix
@@ -974,7 +974,7 @@ SlangResult ArtifactDescUtil::appendDefaultExtension(const ArtifactDesc& desc, S
     if (isCpuBinary(desc) &&
         (desc.kind == ArtifactKind::SharedLibrary || desc.kind == ArtifactKind::Library))
     {
-        const bool isSharedLibraryPrefixPlatform = SLANG_LINUX_FAMILY || SLANG_APPLE_FAMILY;
+        const bool isSharedLibraryPrefixPlatform = SLANG_UNIX_FAMILY;
         if (isSharedLibraryPrefixPlatform)
         {
             outName << "lib";
