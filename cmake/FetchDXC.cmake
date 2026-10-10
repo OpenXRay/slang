@@ -625,6 +625,15 @@ if(_dxc_build_from_source)
         ${_dxc_forwarded_config_args}
         -Wno-dev
     )
+    foreach(_dxc_lang C CXX)
+        if(CMAKE_${_dxc_lang}_COMPILER_LAUNCHER)
+            list(
+                APPEND
+                _dxc_configure_args
+                "-DCMAKE_${_dxc_lang}_COMPILER_LAUNCHER=${CMAKE_${_dxc_lang}_COMPILER_LAUNCHER}"
+            )
+        endif()
+    endforeach()
 
     # Apple Clang 21+ (Xcode 26+) ships a libc++ that marks
     # std::is_nothrow_constructible with [[_Clang::__no_specializations__]],
