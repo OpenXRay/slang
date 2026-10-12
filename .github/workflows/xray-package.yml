@@ -1,0 +1,92 @@
+name: XRay package
+
+on:
+  push:
+    branches: [xray]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    name: ${{ matrix.os }}-${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows, arch: x86_64,  runner: windows-latest,   flags: "-DSLANG_ENABLE_DXIL=ON" }
+          - { os: linux,   arch: x86_64,  runner: ubuntu-22.04,     flags: "-DSLANG_ENABLE_DXIL=OFF" }
+          - { os: linux,   arch: aarch64, runner: ubuntu-22.04-arm, flags: "-DSLANG_ENABLE_DXIL=OFF" }
+          - { os: macos,   arch: aarch64, runner: macos-latest,     flags: "-DSLANG_ENABLE_DXIL=ON -DSLANG_DXC_BUILD_FROM_SOURCE=ON -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0" }
+          - { os: macos,   arch: x86_64,  runner: macos-15-intel,   flags: "-DSLANG_ENABLE_DXIL=ON -DSLANG_DXC_BUILD_FROM_SOURCE=ON -DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0" }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Set up MSVC
+        if: matrix.os == 'windows'
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
+
+      - name: Install Ninja
+        if: matrix.os != 'windows'
+        run: command -v ninja || { if [[ "${{ matrix.os }}" == linux ]]; then sudo apt-get update && sudo apt-get install -y ninja-build; else brew install ninja; fi; }
+
+      - name: Configure
+        run: >
+          cmake --preset default --fresh
+          -DSLANG_ENABLE_TESTS=OFF
+          -DSLANG_ENABLE_EXAMPLES=OFF
+          -DSLANG_ENABLE_GFX=OFF
+          -DSLANG_ENABLE_SLANG_RHI=OFF
+          -DSLANG_ENABLE_SLANGD=OFF
+          -DSLANG_ENABLE_SLANGI=OFF
+          -DSLANG_ENABLE_SLANGRT=OFF
+          -DSLANG_ENABLE_REPLAYER=OFF
+          -DSLANG_ENABLE_CUDA=OFF
+          -DSLANG_ENABLE_OPTIX=OFF
+          -DSLANG_ENABLE_NVAPI=OFF
+          -DSLANG_ENABLE_XLIB=OFF
+          -DSLANG_SLANG_LLVM_FLAVOR=DISABLE
+          ${{ matrix.flags }}
+
+      - name: Build
+        run: cmake --build --preset release
+
+      - name: Package
+        run: |
+          cpack --preset release -G ZIP
+          mkdir -p dist
+          mv build/dist-release/slang.zip "dist/slang-${{ matrix.os }}-${{ matrix.arch }}.zip"
+          unzip -l "dist/slang-${{ matrix.os }}-${{ matrix.arch }}.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: slang-${{ matrix.os }}-${{ matrix.arch }}
+          path: dist/*.zip
+
+  release:
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          tag="xray-${GITHUB_SHA::10}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" dist/*.zip --clobber
+          else
+            gh release create "$tag" dist/*.zip --target "$GITHUB_SHA" --title "$tag" --notes "Slang packages built from xray@${GITHUB_SHA}"
+          fi
