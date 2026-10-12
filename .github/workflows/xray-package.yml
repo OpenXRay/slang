@@ -8,19 +8,42 @@ on:
 permissions:
   contents: write
 
+env:
+  SLANG_FLAGS: >-
+    -DCMAKE_BUILD_TYPE=Release
+    -DSLANG_ENABLE_TESTS=OFF
+    -DSLANG_ENABLE_EXAMPLES=OFF
+    -DSLANG_ENABLE_GFX=OFF
+    -DSLANG_ENABLE_SLANG_RHI=OFF
+    -DSLANG_ENABLE_SLANGD=OFF
+    -DSLANG_ENABLE_SLANGI=OFF
+    -DSLANG_ENABLE_SLANGRT=OFF
+    -DSLANG_ENABLE_REPLAYER=OFF
+    -DSLANG_ENABLE_SLANG_PROXY=OFF
+    -DSLANG_ENABLE_CUDA=OFF
+    -DSLANG_ENABLE_OPTIX=OFF
+    -DSLANG_ENABLE_NVAPI=OFF
+    -DSLANG_ENABLE_XLIB=OFF
+    -DSLANG_ENABLE_SPLIT_DEBUG_INFO=OFF
+    -DSLANG_SLANG_LLVM_FLAVOR=DISABLE
+
 jobs:
   package:
-    name: ${{ matrix.os }}-${{ matrix.arch }}
+    name: ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { os: windows, arch: x86_64,  runner: windows-latest,   flags: "-DSLANG_ENABLE_DXIL=ON" }
-          - { os: linux,   arch: x86_64,  runner: ubuntu-22.04,     flags: "-DSLANG_ENABLE_DXIL=OFF" }
-          - { os: linux,   arch: aarch64, runner: ubuntu-22.04-arm, flags: "-DSLANG_ENABLE_DXIL=OFF" }
-          - { os: macos,   arch: aarch64, runner: macos-latest,     flags: "-DSLANG_ENABLE_DXIL=ON -DSLANG_DXC_BUILD_FROM_SOURCE=ON -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0" }
-          - { os: macos,   arch: x86_64,  runner: macos-15-intel,   flags: "-DSLANG_ENABLE_DXIL=ON -DSLANG_DXC_BUILD_FROM_SOURCE=ON -DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0" }
+          - { name: windows-x86_64,    runner: windows-latest,   flags: "-G Ninja -DSLANG_ENABLE_DXIL=ON" }
+          - { name: linux-x86_64,      runner: ubuntu-22.04,     flags: "-DSLANG_ENABLE_DXIL=OFF" }
+          - { name: linux-aarch64,     runner: ubuntu-22.04-arm, flags: "-DSLANG_ENABLE_DXIL=OFF" }
+          - { name: linux-musl-x86_64, runner: ubuntu-latest,    flags: "-DSLANG_ENABLE_DXIL=OFF", alpine: true }
+          - { name: macos-aarch64,     runner: macos-latest,     flags: "-DSLANG_ENABLE_DXIL=ON -DSLANG_DXC_BUILD_FROM_SOURCE=ON -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0" }
+          - { name: macos-x86_64,      runner: macos-15-intel,   flags: "-DSLANG_ENABLE_DXIL=ON -DSLANG_DXC_BUILD_FROM_SOURCE=ON -DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0" }
+          - { name: freebsd-x86_64,    runner: ubuntu-latest,    flags: "-DSLANG_ENABLE_DXIL=OFF", vm: freebsd, vm-version: "14.3", install: "sudo env IGNORE_OSVERSION=yes pkg update && sudo env IGNORE_OSVERSION=yes pkg install -y cmake git python3" }
+          - { name: openbsd-x86_64,    runner: ubuntu-latest,    flags: "-DSLANG_ENABLE_DXIL=OFF", vm: openbsd, vm-version: "7.8",  install: "sudo pkg_add cmake git python%3" }
+          - { name: netbsd-x86_64,     runner: ubuntu-latest,    flags: "-DSLANG_ENABLE_DXIL=OFF -DCMAKE_C_COMPILER=/usr/pkg/gcc14/bin/gcc -DCMAKE_CXX_COMPILER=/usr/pkg/gcc14/bin/g++ -DCMAKE_SHARED_LINKER_FLAGS=-Wl,-R/usr/pkg/gcc14/lib -DCMAKE_EXE_LINKER_FLAGS=-Wl,-R/usr/pkg/gcc14/lib", vm: netbsd, vm-version: "10.1", install: "sudo pkgin -y install cmake git-base python313 gcc14" }
     defaults:
       run:
         shell: bash
@@ -30,44 +53,71 @@ jobs:
           submodules: recursive
 
       - name: Set up MSVC
-        if: matrix.os == 'windows'
+        if: startsWith(matrix.name, 'windows')
         uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
 
-      - name: Install Ninja
-        if: matrix.os != 'windows'
-        run: command -v ninja || { if [[ "${{ matrix.os }}" == linux ]]; then sudo apt-get update && sudo apt-get install -y ninja-build; else brew install ninja; fi; }
+      - name: Set up Alpine
+        if: matrix.alpine
+        uses: jirutka/setup-alpine@master
+        with:
+          branch: latest-stable
+          packages: build-base cmake git python3 linux-headers
 
-      - name: Configure
-        run: >
-          cmake --preset default --fresh
-          -DSLANG_ENABLE_TESTS=OFF
-          -DSLANG_ENABLE_EXAMPLES=OFF
-          -DSLANG_ENABLE_GFX=OFF
-          -DSLANG_ENABLE_SLANG_RHI=OFF
-          -DSLANG_ENABLE_SLANGD=OFF
-          -DSLANG_ENABLE_SLANGI=OFF
-          -DSLANG_ENABLE_SLANGRT=OFF
-          -DSLANG_ENABLE_REPLAYER=OFF
-          -DSLANG_ENABLE_CUDA=OFF
-          -DSLANG_ENABLE_OPTIX=OFF
-          -DSLANG_ENABLE_NVAPI=OFF
-          -DSLANG_ENABLE_XLIB=OFF
-          -DSLANG_SLANG_LLVM_FLAVOR=DISABLE
-          ${{ matrix.flags }}
-
-      - name: Build
-        run: cmake --build --preset release
-
-      - name: Package
+      - name: Build (host)
+        if: ${{ !matrix.alpine && !matrix.vm }}
         run: |
-          cpack --preset release -G ZIP
+          cmake -B build $SLANG_FLAGS ${{ matrix.flags }}
+          cmake --build build --parallel 4
+          cmake --install build --prefix pkg
+
+      - name: Build (Alpine)
+        if: matrix.alpine
+        shell: alpine.sh {0}
+        run: |
+          cmake -B build $SLANG_FLAGS ${{ matrix.flags }}
+          cmake --build build --parallel 4
+          cmake --install build --prefix pkg
+
+      - name: Build (VM)
+        if: matrix.vm
+        uses: cross-platform-actions/action@v0.32.0
+        with:
+          operating_system: ${{ matrix.vm }}
+          architecture: x86_64
+          version: ${{ matrix.vm-version }}
+          cpu_count: 4
+          memory: 13G
+          environment_variables: SLANG_FLAGS
+          run: |
+            ${{ matrix.install }}
+            ulimit -Sd "$(ulimit -Hd)" || true
+            cmake -B build $SLANG_FLAGS ${{ matrix.flags }}
+            cmake --build build --parallel 4
+            cmake --install build --prefix pkg
+
+      - name: Add DXC runtime and headers
+        if: startsWith(matrix.name, 'windows') || startsWith(matrix.name, 'macos')
+        run: |
+          if [[ "${{ matrix.name }}" == windows-* ]]; then
+            for f in dxcompiler.dll dxil.dll; do cp "$(find build -name "$f" -print -quit)" pkg/bin/; done
+          else
+            for f in libdxcompiler.dylib libdxil.dylib; do cp "$(find build -name "$f" -print -quit)" pkg/lib/; done
+            src="$(find build -type d -name dxc_source-src -print -quit)"
+            mkdir -p pkg/dxc/include/wsl
+            cp -R "$src/include/dxc" pkg/dxc/include/
+            cp -R "$src/external/DirectX-Headers/include/directx" pkg/dxc/include/
+            cp -R "$src/external/DirectX-Headers/include/wsl/stubs" pkg/dxc/include/wsl/
+          fi
+
+      - name: Archive
+        run: |
           mkdir -p dist
-          mv build/dist-release/slang.zip "dist/slang-${{ matrix.os }}-${{ matrix.arch }}.zip"
-          unzip -l "dist/slang-${{ matrix.os }}-${{ matrix.arch }}.zip"
+          (cd pkg && cmake -E tar cf "../dist/slang-${{ matrix.name }}.zip" --format=zip .)
+          cmake -E tar tf "dist/slang-${{ matrix.name }}.zip" | grep -vE '^(include/|share/|lib/slang-standard-module)'
 
       - uses: actions/upload-artifact@v4
         with:
-          name: slang-${{ matrix.os }}-${{ matrix.arch }}
+          name: slang-${{ matrix.name }}
           path: dist/*.zip
 
   release:
