@@ -24,7 +24,6 @@ env:
     -DSLANG_ENABLE_OPTIX=OFF
     -DSLANG_ENABLE_NVAPI=OFF
     -DSLANG_ENABLE_XLIB=OFF
-    -DSLANG_ENABLE_SPLIT_DEBUG_INFO=OFF
     -DSLANG_SLANG_LLVM_FLAVOR=DISABLE
 
 jobs:
@@ -36,14 +35,14 @@ jobs:
       matrix:
         include:
           - { name: windows-x86_64,    runner: windows-latest,   flags: "-G Ninja -DSLANG_ENABLE_DXIL=ON" }
-          - { name: linux-x86_64,      runner: ubuntu-22.04,     flags: "-DSLANG_ENABLE_DXIL=OFF" }
-          - { name: linux-aarch64,     runner: ubuntu-22.04-arm, flags: "-DSLANG_ENABLE_DXIL=OFF" }
-          - { name: linux-musl-x86_64, runner: ubuntu-latest,    flags: "-DSLANG_ENABLE_DXIL=OFF", alpine: true }
+          - { name: linux-x86_64,      runner: ubuntu-22.04,     flags: "-DSLANG_ENABLE_DXIL=OFF -DCMAKE_C_FLAGS=-gz -DCMAKE_CXX_FLAGS=-gz" }
+          - { name: linux-aarch64,     runner: ubuntu-22.04-arm, flags: "-DSLANG_ENABLE_DXIL=OFF -DCMAKE_C_FLAGS=-gz -DCMAKE_CXX_FLAGS=-gz" }
+          - { name: linux-musl-x86_64, runner: ubuntu-latest,    flags: "-DSLANG_ENABLE_DXIL=OFF -DCMAKE_C_FLAGS=-gz -DCMAKE_CXX_FLAGS=-gz", alpine: true }
           - { name: macos-aarch64,     runner: macos-latest,     flags: "-DSLANG_ENABLE_DXIL=ON -DSLANG_DXC_BUILD_FROM_SOURCE=ON -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0" }
           - { name: macos-x86_64,      runner: macos-15-intel,   flags: "-DSLANG_ENABLE_DXIL=ON -DSLANG_DXC_BUILD_FROM_SOURCE=ON -DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0" }
-          - { name: freebsd-x86_64,    runner: ubuntu-latest,    flags: "-DSLANG_ENABLE_DXIL=OFF", vm: freebsd, vm-version: "14.3", install: "sudo env IGNORE_OSVERSION=yes pkg update && sudo env IGNORE_OSVERSION=yes pkg install -y cmake git python3" }
-          - { name: openbsd-x86_64,    runner: ubuntu-latest,    flags: "-DSLANG_ENABLE_DXIL=OFF", vm: openbsd, vm-version: "7.8",  install: "sudo pkg_add cmake git python%3" }
-          - { name: netbsd-x86_64,     runner: ubuntu-latest,    flags: "-DSLANG_ENABLE_DXIL=OFF -DCMAKE_C_COMPILER=/usr/pkg/gcc14/bin/gcc -DCMAKE_CXX_COMPILER=/usr/pkg/gcc14/bin/g++ -DCMAKE_SHARED_LINKER_FLAGS=-Wl,-R/usr/pkg/gcc14/lib -DCMAKE_EXE_LINKER_FLAGS=-Wl,-R/usr/pkg/gcc14/lib", vm: netbsd, vm-version: "10.1", install: "sudo pkgin -y install cmake git-base python313 gcc14" }
+          - { name: freebsd-x86_64,    runner: ubuntu-latest,    flags: "-DSLANG_ENABLE_DXIL=OFF -DCMAKE_C_FLAGS=-gz -DCMAKE_CXX_FLAGS=-gz", vm: freebsd, vm-version: "14.3", install: "sudo env IGNORE_OSVERSION=yes pkg update && sudo env IGNORE_OSVERSION=yes pkg install -y cmake git python3" }
+          - { name: openbsd-x86_64,    runner: ubuntu-latest,    flags: "-DSLANG_ENABLE_DXIL=OFF -DCMAKE_C_FLAGS=-gz -DCMAKE_CXX_FLAGS=-gz", vm: openbsd, vm-version: "7.8",  install: "sudo pkg_add cmake git python%3" }
+          - { name: netbsd-x86_64,     runner: ubuntu-latest,    flags: "-DSLANG_ENABLE_DXIL=OFF -DCMAKE_C_FLAGS=-gz -DCMAKE_CXX_FLAGS=-gz -DCMAKE_C_COMPILER=/usr/pkg/gcc14/bin/gcc -DCMAKE_CXX_COMPILER=/usr/pkg/gcc14/bin/g++ -DCMAKE_SHARED_LINKER_FLAGS=-Wl,-R/usr/pkg/gcc14/lib -DCMAKE_EXE_LINKER_FLAGS=-Wl,-R/usr/pkg/gcc14/lib", vm: netbsd, vm-version: "10.1", install: "sudo pkgin -y install cmake git-base python313 gcc14" }
     defaults:
       run:
         shell: bash
@@ -71,6 +70,7 @@ jobs:
           cmake -B build $SLANG_FLAGS ${{ matrix.flags }}
           cmake --build build --parallel 4
           cmake --install build --prefix pkg
+          cmake --install build --prefix pkg-debug-info --component debug-info
 
       - name: Build (Alpine)
         if: matrix.alpine
@@ -79,6 +79,7 @@ jobs:
           cmake -B build $SLANG_FLAGS ${{ matrix.flags }}
           cmake --build build --parallel 4
           cmake --install build --prefix pkg
+          cmake --install build --prefix pkg-debug-info --component debug-info
 
       - name: Build (VM)
         if: matrix.vm
@@ -96,6 +97,7 @@ jobs:
             cmake -B build $SLANG_FLAGS ${{ matrix.flags }}
             cmake --build build --parallel 4
             cmake --install build --prefix pkg
+            cmake --install build --prefix pkg-debug-info --component debug-info
 
       - name: Add DXC runtime and headers
         if: startsWith(matrix.name, 'windows') || startsWith(matrix.name, 'macos')
@@ -115,7 +117,10 @@ jobs:
         run: |
           mkdir -p dist
           (cd pkg && cmake -E tar cf "../dist/slang-${{ matrix.name }}.zip" --format=zip .)
+          (cd pkg-debug-info && cmake -E tar cf "../dist/slang-${{ matrix.name }}-debug-info.zip" --format=zip .)
           cmake -E tar tf "dist/slang-${{ matrix.name }}.zip" | grep -vE '^(include/|share/|lib/slang-standard-module)'
+          cmake -E tar tf "dist/slang-${{ matrix.name }}-debug-info.zip"
+          ls -l dist
 
       - uses: actions/upload-artifact@v4
         with:
